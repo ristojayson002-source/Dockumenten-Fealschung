@@ -59,3 +59,8 @@ Necessary ingredients and materials:
 - Browser mit Canvas, FileReader, Pointer Events
 - Internetverbindung für Tesseract.js CDN beim ersten OCR
 - Optional: VS Code + Live Server
+
+Dieses Projekt dient ausschließlich zu Bildungs-, Forschungs- und Aufklärungszwecken. Es zeigt, wie OCR, Bildverarbeitung und Canvas-Rendering im Browser funktionieren, und soll das Bewusstsein für die Manipulierbarkeit digitaler Dokumente schärfen.
+
+Die Nutzung zur Veränderung echter Ausweise, amtlicher Dokumente oder zur Täuschung Dritter ist strafbar und ausdrücklich nicht gestattet. Der Autor übernimmt keine Haftung für Missbrauch. Verantwortung liegt allein beim Nutzer!!!!
+
