@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ID Forge v3.4</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; background:#0d0d0d; color:#eee; padding:16px; margin:0; }
+  h1 { font-size:18px; margin:0 0 10px 0; }
+  input, button, select { padding:6px; margin:4px 0; background:#1e1e1e; color:#eee; border:1px solid #333; border-radius:4px; }
+  button { cursor:pointer; }
+  button:hover { background:#2a2a2a; }
+  button:disabled { opacity:0.5; cursor:not-allowed; }
+  #stage { position:relative; display:inline-block; margin-top:10px; border:1px solid #333; max-width:100%; user-select:none; }
+  #preview { display:block; max-width:100%; height:auto; cursor:crosshair; }
+  #overlay { position:absolute; left:0; top:0; }
+  #controls { margin-top:12px; padding:10px; background:#151515; border:1px solid #333; border-radius:6px; max-width:780px; }
+  #controls label { display:block; margin:4px 0; font-size:12px; color:#bbb; }
+  #controls input, #controls select { width:100%; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  .row > * { flex:1; min-width:120px; }
+  #status { margin-top:8px; color:#8cf; font-size:12px; min-height:16px; }
+  .hint { color:#777; font-size:11px; margin-top:6px; line-height:1.4; }
+  .swatch { display:inline-block; width:16px; height:16px; border:1px solid #444; vertical-align:middle; margin-left:6px; border-radius:2px; }
+  #selInfo { font-size:12px; color:#fc6; margin-top:4px; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  .toolbar button { flex:0 0 auto; }
+  #compare { display:none; margin-top:10px; border:1px solid #333; max-width:100%; }
+  #compare img { display:block; max-width:100%; }
+  #zoomWrap { display:none; margin-top:10px; }
+  #zoomCanvas { border:1px solid #333; image-rendering: pixelated; background:#000; }
+  .chk { display:flex; align-items:center; gap:6px; font-size:12px; color:#bbb; margin:4px 0; }
+  .chk input { width:auto; margin:0; }
+</style>
+</head>
+<body>
+<h1>ID Forge v3.4 - Click + Drag to Move</h1>
+
+<div class="toolbar">
+  <input type="file" id="file" accept="image/*"/>
+  <button id="btnOcr">1) OCR starten</button>
+  <button id="btnCompare">Vergleich an/aus</button>
+</div>
+<div id="status"></div>
+<div class="hint">
+  Klick auf ein Wort → grüner Rahmen. Zieh die Box mit der Maus, wenn OCR die Position falsch gesetzt hat.
+  Ecken ziehen = Größe ändern.
+</div>
+
+<div id="stage">
+  <img id="preview" alt=""/>
+  <canvas id="overlay"></canvas>
+</div>
+
+<div id="controls" style="display:none">
+  <div id="selInfo">Kein Wort gewählt – klicke auf Text im Bild.</div>
+
+  <label>Neuer Text:
+    <input id="newText" placeholder="z.B. 01.01.1990"/>
+  </label>
+
+  <div class="row">
+    <label>Font:
+      <select id="fontFamily">
+        <option>Arial</option>
+        <option>Helvetica</option>
+        <option>Verdana</option>
+        <option>Tahoma</option>
+        <option>Calibri</option>
+        <option>Times New Roman</option>
+        <option>Courier New</option>
+        <option>Consolas</option>
+      </select>
+    </label>
+    <label>Fontstärke:
+      <select id="fontWeight">
+        <option value="normal">normal</option>
+        <option value="bold">bold</option>
+        <option value="300">300</option>
+        <option value="500">500</option>
+        <option value="600">600</option>
+        <option value="700">700</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="row">
+    <label>BG (auto)
+      <input id="bgColor" type="color" value="#e8ddc9"/>
+      <span id="bgSw" class="swatch"></span>
+    </label>
+    <label>Text (auto)
+      <input id="textColor" type="color" value="#1a1a1a"/>
+      <span id="txSw" class="swatch"></span>
+    </label>
+    <label>Padding px:
+      <input id="pad" type="number" value="2"/>
+    </label>
+  </div>
+
+  <div class="row">
+    <label>Fontgröße px (auto)
+      <input id="fontSize" type="number" value="24"/>
+    </label>
+    <label>Tracking px (auto)
+      <input id="tracking" type="number" step="0.1" value="0"/>
+    </label>
+    <label>Y-Offset px (auto)
+      <input id="yOffset" type="number" step="0.5" value="0"/>
+    </label>
+    <label>Strich-Dicke px
+      <input id="strokeWidth" type="number" step="0.1" value="0.4"/>
+    </label>
+  </div>
+
+  <div class="row">
+    <label>Unschärfe px (auto)
+      <input id="blur" type="number" step="0.1" value="0.8"/>
+    </label>
+    <label>Rauschen 0-30 (auto)
+      <input id="noise" type="number" value="9"/>
+    </label>
+    <label>Kontrast 0-2
+      <input id="inkContrast" type="number" step="0.05" value="1"/>
+    </label>
+    <label>Inpaint 1-12
+      <input id="inpaintPasses" type="number" value="11"/>
+    </label>
+  </div>
+
+  <label class="chk">
+    <input type="checkbox" id="aggressive" checked/> Aggressiv: Reste sicher entfernen (Rest-Ink → BG)
+  </label>
+  <label class="chk">
+    <input type="checkbox" id="moveMode" checked/> Box verschiebbar / Ecken ziehbar
+  </label>
+  <div class="toolbar">
+    <button id="btnReset">Box zurücksetzen (OCR-Position)</button>
+  </div>
+
+  <div class="toolbar">
+    <button id="btnPatch">2) Anwenden</button>
+    <a id="dl" style="display:none;color:#4f4;text-decoration:none;padding:6px;">Download</a>
+  </div>
+
+  <div class="hint">
+    Wenn die neue Schrift woanders landen soll → Box greifen und verschieben.<br/>
+    Wenn OCR ein Wort falsch umrandet → Ecke ziehen, um die Box anzupassen.<br/>
+    Reste → Inpaint 12 + Padding 3.
+  </div>
+</div>
+
+<div id="zoomWrap">
+  <canvas id="zoomCanvas" width="600" height="160"></canvas>
+</div>
+
+<canvas id="work" style="display:none"></canvas>
+<img id="compare" alt=""/>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<script>
+const $ = id => document.getElementById(id);
+let originalImage = null;
+let words = [];
+let selectedIdx = -1;
+
+// Live-BBox der Auswahl (in Bildkoordinaten). Kann durch Drag geändert werden.
+let liveBBox = null;
+
+// Interaktionszustand
+let action = null; // null | 'move' | 'resize'
+let resizeCorner = null; // 'nw','ne','sw','se'
+let actionStart = null;  // {x,y}
+let bboxStart = null;    // {x0,y0,x1,y1}
+const HANDLE = 6;        // Pixel in Bildschirmkoordinaten
+
+let patchedCanvas = null;
+const status = t => { $('status').textContent = t || ''; };
+
+// ------------------------------------------------------------------
+// FILE INPUT
+// ------------------------------------------------------------------
+$('file').onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    originalImage = img;
+    $('preview').src = url;
+    $('preview').onload = () => { resizeOverlay(); drawBoxes(); };
+    words = []; selectedIdx = -1; liveBBox = null; patchedCanvas = null;
+    $('controls').style.display = 'block';
+    $('dl').style.display = 'none';
+    $('compare').style.display = 'none';
+    $('zoomWrap').style.display = 'none';
+    status('Bild geladen. OCR starten.');
+  };
+  img.src = url;
+};
+
+// ------------------------------------------------------------------
+// OCR
+// ------------------------------------------------------------------
+$('btnOcr').onclick = async () => {
+  if (!originalImage) { alert('Bitte zuerst Bild wählen'); return; }
+  $('btnOcr').disabled = true;
+  status('OCR läuft...');
+  try {
+    const { data } = await Tesseract.recognize(originalImage.src, 'deu+eng', {
+      logger: m => { if (m.status) status(m.status + ' ' + Math.round((m.progress||0)*100) + '%'); }
+    });
+    words = (data.words || [])
+      .filter(w => w.text && w.text.trim().length > 0)
+      .map(w => ({ text: w.text, bbox: w.bbox }));
+    drawBoxes();
+    status(words.length + ' Wörter erkannt. Klicke auf ein Wort.');
+  } catch (err) {
+    status('Fehler: ' + err.message);
+  } finally {
+    $('btnOcr').disabled = false;
+  }
+};
+
+// ------------------------------------------------------------------
+// MAUS-INTERAKTION (Preview + Overlay teilen sich einen Container)
+// ------------------------------------------------------------------
+function stagePoint(e) {
+  const rect = $('preview').getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) / rect.width  * originalImage.naturalWidth,
+    y: (e.clientY - rect.top)  / rect.height * originalImage.naturalHeight,
+    sx: e.clientX - rect.left,
+    sy: e.clientY - rect.top
+  };
+}
+
+function getSelectionRect() {
+  if (selectedIdx < 0) return null;
+  return liveBBox || words[selectedIdx].bbox;
+}
+
+function hitTestOverlay(sx, sy) {
+  const r = getSelectionRect();
+  if (!r) return null;
+  const img = $('preview');
+  const sxScale = img.clientWidth  / originalImage.naturalWidth;
+  const syScale = img.clientHeight / originalImage.naturalHeight;
+  const x0 = r.x0 * sxScale;
+  const y0 = r.y0 * syScale;
+  const x1 = r.x1 * sxScale;
+  const y1 = r.y1 * syScale;
+
+  const corners = [
+    { name:'nw', x:x0, y:y0 },
+    { name:'ne', x:x1, y:y0 },
+    { name:'sw', x:x0, y:y1 },
+    { name:'se', x:x1, y:y1 }
+  ];
+  for (const c of corners) {
+    if (Math.abs(sx - c.x) <= HANDLE && Math.abs(sy - c.y) <= HANDLE) return { type:'resize', corner:c.name };
+  }
+  if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) return { type:'move' };
+  return null;
+}
+
+// Pointer events auf Preview + Overlay (Overlay darüber, pointer-events:auto)
+$('overlay').addEventListener('pointerdown', (e) => {
+  if (!originalImage) return;
+  const p = stagePoint(e);
+  const moveEnabled = $('moveMode').checked;
+
+  // Erst prüfen, ob auf bestehender Auswahl geklickt
+  const hit = moveEnabled ? hitTestOverlay(p.sx, p.sy) : null;
+  if (hit) {
+    action = hit.type;
+    resizeCorner = hit.corner || null;
+    actionStart = { x: p.x, y: p.y };
+    bboxStart = { ...getSelectionRect() };
+    $('overlay').setPointerCapture(e.pointerId);
+    return;
+  }
+
+  // Sonst: neues Wort wählen
+  const rect = $('preview').getBoundingClientRect();
+  let hitWord = -1, bestArea = Infinity;
+  words.forEach((w,i) => {
+    const b = w.bbox;
+    if (p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1) {
+      const a = (b.x1-b.x0)*(b.y1-b.y0);
+      if (a < bestArea) { bestArea = a; hitWord = i; }
+    }
+  });
+  if (hitWord >= 0) {
+    selectedIdx = hitWord;
+    liveBBox = { ...words[hitWord].bbox };
+    drawBoxes();
+    sampleAndPrepare();
+  }
+});
+
+$('overlay').addEventListener('pointermove', (e) => {
+  if (!action) return;
+  const p = stagePoint(e);
+  const dx = p.x - actionStart.x;
+  const dy = p.y - actionStart.y;
+
+  if (action === 'move') {
+    liveBBox = {
+      x0: bboxStart.x0 + dx,
+      y0: bboxStart.y0 + dy,
+      x1: bboxStart.x1 + dx,
+      y1: bboxStart.y1 + dy
+    };
+  } else if (action === 'resize' && resizeCorner) {
+    let { x0, y0, x1, y1 } = bboxStart;
+    if (resizeCorner === 'nw') { x0 += dx; y0 += dy; }
+    if (resizeCorner === 'ne') { x1 += dx; y0 += dy; }
+    if (resizeCorner === 'sw') { x0 += dx; y1 += dy; }
+    if (resizeCorner === 'se') { x1 += dx; y1 += dy; }
+    // Mindestgröße
+    if (x1 - x0 < 6) x1 = x0 + 6;
+    if (y1 - y0 < 6) y1 = y0 + 6;
+    liveBBox = { x0, y0, x1, y1 };
+  }
+
+  // Grenzen
+  if (liveBBox) {
+    liveBBox.x0 = Math.max(0, Math.min(originalImage.naturalWidth,  liveBBox.x0));
+    liveBBox.y0 = Math.max(0, Math.min(originalImage.naturalHeight, liveBBox.y0));
+    liveBBox.x1 = Math.max(0, Math.min(originalImage.naturalWidth,  liveBBox.x1));
+    liveBBox.y1 = Math.max(0, Math.min(originalImage.naturalHeight, liveBBox.y1));
+  }
+  drawBoxes();
+});
+
+$('overlay').addEventListener('pointerup', (e) => {
+  if (action) {
+    action = null;
+    resizeCorner = null;
+    actionStart = null;
+    bboxStart = null;
+    try { $('overlay').releasePointerCapture(e.pointerId); } catch(_) {}
+    drawBoxes();
+    showZoom();
+  }
+});
+
+// Alte Klick-Funktion entfernen, damit keine Doppelauswahl entsteht
+$('preview').onclick = null;
+
+// ------------------------------------------------------------------
+// OVERLAY
+// ------------------------------------------------------------------
+function resizeOverlay() {
+  const img = $('preview');
+  const c = $('overlay');
+  c.width = img.clientWidth;
+  c.height = img.clientHeight;
+  c.style.width  = img.clientWidth + 'px';
+  c.style.height = img.clientHeight + 'px';
+}
+function drawBoxes() {
+  const img = $('preview');
+  const c = $('overlay');
+  if (!img.clientWidth || !img.naturalWidth) return;
+  if (c.width !== img.clientWidth || c.height !== img.clientHeight) resizeOverlay();
+  const sx = img.clientWidth / img.naturalWidth;
+  const sy = img.clientHeight / img.naturalHeight;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+
+  // alle Wörter
+  words.forEach((w,i) => {
+    const b = w.bbox;
+    const isSel = i === selectedIdx;
+    ctx.globalAlpha = isSel ? 1 : 0.25;
+    ctx.strokeStyle = isSel ? '#0f0' : 'red';
+    ctx.lineWidth = isSel ? 2 : 1;
+    ctx.strokeRect(b.x0*sx, b.y0*sy, (b.x1-b.x0)*sx, (b.y1-b.y0)*sy);
+  });
+
+  // Auswahl-Box (live)
+  const r = getSelectionRect();
+  if (r) {
+    const x0 = r.x0*sx, y0 = r.y0*sy, x1 = r.x1*sx, y1 = r.y1*sy;
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#0f0';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0, y0, x1-x0, y1-y0);
+
+    // Ecken
+    ctx.fillStyle = '#0f0';
+    const s = 6;
+    ctx.fillRect(x0-s/2, y0-s/2, s, s);
+    ctx.fillRect(x1-s/2, y0-s/2, s, s);
+    ctx.fillRect(x0-s/2, y1-s/2, s, s);
+    ctx.fillRect(x1-s/2, y1-s/2, s, s);
+  }
+  ctx.globalAlpha = 1;
+}
+window.addEventListener('resize', () => { resizeOverlay(); drawBoxes(); });
+
+// ------------------------------------------------------------------
+// HELPERS
+// ------------------------------------------------------------------
+function hexToRgb(hex) {
+  const m = hex.replace('#','');
+  return { r: parseInt(m.substring(0,2),16), g: parseInt(m.substring(2,4),16), b: parseInt(m.substring(4,6),16) };
+}
+function rgbToHex(r,g,b) {
+  return '#' + [r,g,b].map(v => Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+}
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = arr.slice().sort((a,b)=>a-b);
+  return s[Math.floor(s.length/2)];
+}
+function measureInk(imageData, w, h) {
+  const d = imageData.data;
+  let minX = w, minY = h, maxX = -1, maxY = -1;
+  const lum = new Uint8Array(w*h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y*w + x) * 4;
+      const L = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      lum[y*w+x] = L;
+    }
+  }
+  let mn = 255, mx = 0;
+  for (let i = 0; i < lum.length; i++) { if (lum[i]<mn) mn=lum[i]; if (lum[i]>mx) mx=lum[i]; }
+  const thr = mn + (mx - mn) * 0.55;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (lum[y*w+x] < thr) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) return { x0:0, y0:0, x1:w, y1:h };
+  return { x0:minX, y0:minY, x1:maxX+1, y1:maxY+1 };
+}
+
+// ------------------------------------------------------------------
+// AUTO SAMPLING (nutzt liveBBox, nicht die OCR-BBox)
+// ------------------------------------------------------------------
+function sampleAndPrepare() {
+  if (!originalImage || selectedIdx < 0) return;
+  const w = words[selectedIdx];
+  const b = liveBBox || w.bbox;
+  const W = originalImage.naturalWidth, H = originalImage.naturalHeight;
+
+  const work = $('work');
+  work.width = W; work.height = H;
+  const wctx = work.getContext('2d');
+  wctx.drawImage(originalImage, 0, 0);
+
+  const pad = 4;
+  const rx0 = Math.max(0, Math.floor(b.x0 - pad));
+  const ry0 = Math.max(0, Math.floor(b.y0 - pad));
+  const rx1 = Math.min(W, Math.ceil(b.x1 + pad));
+  const ry1 = Math.min(H, Math.ceil(b.y1 + pad));
+  const rw = rx1 - rx0, rh = ry1 - ry0;
+  const ring = wctx.getImageData(rx0, ry0, rw, rh).data;
+  const rs=[], gs=[], bs=[];
+  for (let y = 0; y < rh; y++) {
+    for (let x = 0; x < rw; x++) {
+      const gx = rx0+x, gy = ry0+y;
+      if (gx >= b.x0 && gx < b.x1 && gy >= b.y0 && gy < b.y1) continue;
+      const i = (y*rw + x) * 4;
+      rs.push(ring[i]); gs.push(ring[i+1]); bs.push(ring[i+2]);
+    }
+  }
+  const bg = { r: median(rs), g: median(gs), b: median(bs) };
+
+  const bw = Math.max(1, Math.round(b.x1 - b.x0));
+  const bh = Math.max(1, Math.round(b.y1 - b.y0));
+  const inside = wctx.getImageData(Math.round(b.x0), Math.round(b.y0), bw, bh);
+  const ink = measureInk(inside, bw, bh);
+
+  const d = inside.data;
+  const lum = new Float32Array(bw*bh);
+  let mn=255, mx=0;
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const L = 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    lum[p] = L; if (L<mn) mn=L; if (L>mx) mx=L;
+  }
+  const thr = mn + (mx - mn) * 0.5;
+  const tr=[], tg=[], tb=[];
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    if (lum[p] < thr) { tr.push(d[i]); tg.push(d[i+1]); tb.push(d[i+2]); }
+  }
+  const tx = { r: median(tr) || 20, g: median(tg) || 20, b: median(tb) || 20 };
+
+  const estBlur = estimateBlur(lum, bw, bh, thr);
+  const noiseEst = estimateNoise(rs, gs, bs);
+
+  const inkH = ink.y1 - ink.y0;
+  const estimatedFontSize = Math.max(8, Math.round(inkH / 0.72));
+
+  $('bgColor').value = rgbToHex(bg.r, bg.g, bg.b);
+  $('textColor').value = rgbToHex(tx.r, tx.g, tx.b);
+  $('bgSw').style.background = $('bgColor').value;
+  $('txSw').style.background = $('textColor').value;
+  $('fontSize').value = estimatedFontSize;
+  $('blur').value = Math.max(0.8, estBlur).toFixed(1);
+  $('noise').value = Math.max(9, Math.round(noiseEst));
+  $('tracking').value = 0;
+  $('yOffset').value = 0;
+  $('newText').value = w.text;
+  $('newText').focus();
+  $('newText').select();
+
+  $('selInfo').textContent =
+    'Gewählt: "' + w.text + '"  |  BBox ' + Math.round(b.x0) + ',' + Math.round(b.y0) + '–' + Math.round(b.x1) + ',' + Math.round(b.y1) +
+    '  |  Ink-Höhe ' + inkH + 'px  |  Fontgröße auto: ' + estimatedFontSize + 'px';
+
+  work._ink = ink;
+  work._bbox = b;
+  work._bg = bg;
+  work._tx = tx;
+
+  showZoom();
+  status('Bereit. Box ziehen oder Text ändern, dann "Anwenden".');
+}
+
+function estimateBlur(lum, w, h, thr) {
+  let edges = 0, sum = 0;
+  for (let y = 0; y < h; y++) {
+    let prev = lum[y*w] < thr;
+    for (let x = 1; x < w; x++) {
+      const cur = lum[y*w+x] < thr;
+      if (cur !== prev) {
+        let k = 0;
+        for (let s = 1; s < 4 && x - s >= 0; s++) {
+          const v = lum[y*w + x - s] < thr;
+          if (v !== cur) k++;
+        }
+        sum += k; edges++;
+        prev = cur;
+      }
+    }
+  }
+  if (!edges) return 0.5;
+  const soft = sum / edges;
+  return Math.max(0.2, Math.min(2.0, soft * 0.5));
+}
+function estimateNoise(rs, gs, bs) {
+  const all = rs.concat(gs, bs);
+  const mean = all.reduce((a,b)=>a+b,0) / (all.length || 1);
+  let v = 0;
+  for (const x of all) v += (x - mean) ** 2;
+  const sd = Math.sqrt(v / (all.length || 1));
+  return Math.max(0, Math.min(30, sd));
+}
+
+// ------------------------------------------------------------------
+// ZOOM
+// ------------------------------------------------------------------
+function showZoom() {
+  if (selectedIdx < 0 || !originalImage) return;
+  const b = getSelectionRect();
+  if (!b) return;
+  const pad = 12;
+  const sx = Math.max(0, Math.floor(b.x0 - pad));
+  const sy = Math.max(0, Math.floor(b.y0 - pad));
+  const sw = Math.min(originalImage.naturalWidth  - sx, Math.round(b.x1 - b.x0) + pad*2);
+  const sh = Math.min(originalImage.naturalHeight - sy, Math.round(b.y1 - b.y0) + pad*2);
+  if (sw <= 0 || sh <= 0) { $('zoomWrap').style.display = 'none'; return; }
+  const src = patchedCanvas || originalImage;
+  const zc = $('zoomCanvas');
+  const zctx = zc.getContext('2d');
+  zctx.imageSmoothingEnabled = false;
+  zctx.fillStyle = '#000';
+  zctx.fillRect(0, 0, zc.width, zc.height);
+  zctx.drawImage(src, sx, sy, sw, sh, 0, 0, zc.width, zc.height);
+  $('zoomWrap').style.display = 'block';
+}
+
+// ------------------------------------------------------------------
+// INPAINT
+// ------------------------------------------------------------------
+function inpaint(ctx, b, bg, passes, strong) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const x0 = Math.max(0, Math.round(b.x0)), y0 = Math.max(0, Math.round(b.y0));
+  const x1 = Math.min(W, Math.round(b.x1)), y1 = Math.min(H, Math.round(b.y1));
+  const w = x1 - x0, h = y1 - y0;
+  if (w <= 0 || h <= 0) return;
+
+  let img = ctx.getImageData(x0, y0, w, h);
+
+  for (let p = 0; p < passes; p++) img = medianFilterNxN(img, w, h, 1);
+  img = medianFilterNxN(img, w, h, 2);
+  img = medianFilterRect(img, w, h, 0, 2);
+  img = medianFilterRect(img, w, h, 2, 0);
+
+  img = blendToBackground(img, bg, strong);
+  img = medianFilterNxN(img, w, h, 1);
+  img = blendToBackground(img, bg, strong);
+
+  ctx.putImageData(img, x0, y0);
+}
+function blendToBackground(imageData, bg, strong) {
+  const d = imageData.data;
+  const baseMix = strong ? 0.96 : 0.70;
+  const thr = 60;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], g = d[i+1], b = d[i+2];
+    const dr = r - bg.r, dg = g - bg.g, db = b - bg.b;
+    const dist = Math.sqrt(dr*dr + dg*dg + db*db);
+    let k = dist / thr;
+    if (k > 1) k = 1;
+    k = k * baseMix;
+    d[i]   = r * (1 - k) + bg.r * k;
+    d[i+1] = g * (1 - k) + bg.g * k;
+    d[i+2] = b * (1 - k) + bg.b * k;
+  }
+  return imageData;
+}
+function medianFilterNxN(imageData, w, h, r) {
+  const src = new Uint8ClampedArray(imageData.data);
+  const out = new ImageData(w, h);
+  const dst = out.data;
+  const size = (2*r+1)*(2*r+1);
+  const R = new Array(size), G = new Array(size), B = new Array(size);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let n = 0;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const sx = Math.min(w-1, Math.max(0, x + dx));
+          const sy = Math.min(h-1, Math.max(0, y + dy));
+          const i = (sy * w + sx) * 4;
+          R[n] = src[i]; G[n] = src[i+1]; B[n] = src[i+2];
+          n++;
+        }
+      }
+      const i2 = (y * w + x) * 4;
+      dst[i2]   = medArr(R, n);
+      dst[i2+1] = medArr(G, n);
+      dst[i2+2] = medArr(B, n);
+      dst[i2+3] = 255;
+    }
+  }
+  return out;
+}
+function medianFilterRect(imageData, w, h, rx, ry) {
+  const src = new Uint8ClampedArray(imageData.data);
+  const out = new ImageData(w, h);
+  const dst = out.data;
+  const size = (2*rx+1)*(2*ry+1);
+  const R = new Array(size), G = new Array(size), B = new Array(size);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let n = 0;
+      for (let dy = -ry; dy <= ry; dy++) {
+        for (let dx = -rx; dx <= rx; dx++) {
+          const sx = Math.min(w-1, Math.max(0, x + dx));
+          const sy = Math.min(h-1, Math.max(0, y + dy));
+          const i = (sy * w + sx) * 4;
+          R[n] = src[i]; G[n] = src[i+1]; B[n] = src[i+2];
+          n++;
+        }
+      }
+      const i2 = (y * w + x) * 4;
+      dst[i2]   = medArr(R, n);
+      dst[i2+1] = medArr(G, n);
+      dst[i2+2] = medArr(B, n);
+      dst[i2+3] = 255;
+    }
+  }
+  return out;
+}
+function medArr(a, n) {
+  for (let i = 1; i < n; i++) {
+    const v = a[i]; let j = i-1;
+    while (j >= 0 && a[j] > v) { a[j+1] = a[j]; j--; }
+    a[j+1] = v;
+  }
+  return a[Math.floor(n/2)];
+}
+
+// ------------------------------------------------------------------
+// RENDER TEXT
+// ------------------------------------------------------------------
+function drawText(ctx, bbox, ink, text, opts) {
+  const { fontFamily, fontWeight, fontSize, color, tracking, yOffset, strokeWidth } = opts;
+  const bboxTopY = bbox.y0;
+  const inkBottomY = bboxTopY + ink.y1;
+  const inkCenterX = bbox.x0 + (ink.x0 + ink.x1) / 2;
+
+  ctx.save();
+  ctx.font = fontWeight + ' ' + fontSize + 'px "' + fontFamily + '"';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = color;
+  if (strokeWidth > 0) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = strokeWidth;
+    ctx.lineJoin = 'round';
+  }
+
+  const chars = [...text];
+  let totalWidth = 0;
+  for (let i = 0; i < chars.length; i++) {
+    totalWidth += ctx.measureText(chars[i]).width;
+    if (i < chars.length - 1) totalWidth += tracking;
+  }
+  let cx = inkCenterX - totalWidth / 2;
+  const baselineY = inkBottomY + yOffset;
+
+  for (let i = 0; i < chars.length; i++) {
+    if (strokeWidth > 0) ctx.strokeText(chars[i], cx, baselineY);
+    ctx.fillText(chars[i], cx, baselineY);
+    cx += ctx.measureText(chars[i]).width + tracking;
+  }
+  ctx.restore();
+}
+
+// ------------------------------------------------------------------
+// APPLY PATCH
+// ------------------------------------------------------------------
+$('btnPatch').onclick = () => {
+  if (!originalImage || selectedIdx < 0) { alert('Erst OCR und Wort anklicken'); return; }
+  const b0 = getSelectionRect();
+  const pad = Math.max(0, Number($('pad').value) || 0);
+  const b = {
+    x0: Math.max(0, b0.x0 - pad),
+    y0: Math.max(0, b0.y0 - pad),
+    x1: Math.min(originalImage.naturalWidth,  b0.x1 + pad),
+    y1: Math.min(originalImage.naturalHeight, b0.y1 + pad)
+  };
+
+  const bg = hexToRgb($('bgColor').value);
+  const tx = hexToRgb($('textColor').value);
+  const font = $('fontFamily').value;
+  const weight = $('fontWeight').value;
+  const size = Number($('fontSize').value);
+  const tracking = Number($('tracking').value) || 0;
+  const yOffset = Number($('yOffset').value) || 0;
+  const blurAmt = Number($('blur').value) || 0;
+  const noiseAmt = Number($('noise').value) || 0;
+  const contrast = Number($('inkContrast').value) || 1;
+  const strokeWidth = Number($('strokeWidth').value) || 0;
+  const passes = Math.max(1, Math.min(12, Number($('inpaintPasses').value) || 11));
+  const strong = $('aggressive').checked;
+  const newText = $('newText').value;
+
+  const base = document.createElement('canvas');
+  base.width = originalImage.naturalWidth;
+  base.height = originalImage.naturalHeight;
+  const bctx = base.getContext('2d');
+  bctx.drawImage(originalImage, 0, 0);
+
+  inpaint(bctx, b, bg, passes, strong);
+
+  const layer = document.createElement('canvas');
+  layer.width = base.width; layer.height = base.height;
+  const lctx = layer.getContext('2d');
+  lctx.clearRect(0,0,layer.width, layer.height);
+
+  const inkColor = adjustContrast(tx, contrast);
+  drawText(lctx, b0, $('work')._ink || { x0:0, y0:0, x1:b0.x1-b0.x0, y1:b0.y1-b0.y0 },
+           newText, {
+    fontFamily: font,
+    fontWeight: weight,
+    fontSize: size,
+    color: 'rgb(' + inkColor.r + ',' + inkColor.g + ',' + inkColor.b + ')',
+    tracking,
+    yOffset,
+    strokeWidth
+  });
+
+  let srcLayer = layer;
+  if (blurAmt > 0) {
+    const bl = document.createElement('canvas');
+    bl.width = layer.width; bl.height = layer.height;
+    const blctx = bl.getContext('2d');
+    blctx.filter = 'blur(' + blurAmt + 'px)';
+    blctx.drawImage(layer, 0, 0);
+    srcLayer = bl;
+  }
+
+  bctx.drawImage(srcLayer, 0, 0);
+  addNoiseRegion(bctx, b, noiseAmt);
+
+  patchedCanvas = base;
+  $('preview').src = base.toDataURL('image/png');
+  $('preview').onload = () => { resizeOverlay(); drawBoxes(); };
+
+  const dl = $('dl');
+  dl.href = base.toDataURL('image/png');
+  dl.download = 'id_patched.png';
+  dl.textContent = 'Download id_patched.png';
+  dl.style.display = 'inline';
+  status('Angewendet.');
+  showZoom();
+
+  if ($('compare').style.display === 'block') updateCompare();
+};
+
+function adjustContrast(c, k) {
+  return {
+    r: Math.max(0, Math.min(255, (c.r - 128) * k + 128)),
+    g: Math.max(0, Math.min(255, (c.g - 128) * k + 128)),
+    b: Math.max(0, Math.min(255, (c.b - 128) * k + 128))
+  };
+}
+function addNoiseRegion(ctx, b, amount) {
+  if (!amount) return;
+  const x0 = Math.max(0, Math.round(b.x0));
+  const y0 = Math.max(0, Math.round(b.y0));
+  const w = Math.round(b.x1 - b.x0), h = Math.round(b.y1 - b.y0);
+  if (w <= 0 || h <= 0) return;
+  const img = ctx.getImageData(x0, y0, w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * amount * 2;
+    d[i]   = Math.max(0, Math.min(255, d[i]   + n));
+    d[i+1] = Math.max(0, Math.min(255, d[i+1] + n));
+    d[i+2] = Math.max(0, Math.min(255, d[i+2] + n));
+  }
+  ctx.putImageData(img, x0, y0);
+}
+
+// ------------------------------------------------------------------
+// RESET BOX
+// ------------------------------------------------------------------
+$('btnReset').onclick = () => {
+  if (selectedIdx < 0) return;
+  liveBBox = { ...words[selectedIdx].bbox };
+  drawBoxes();
+  sampleAndPrepare();
+  status('Box zurückgesetzt auf OCR-Position.');
+};
+
+// ------------------------------------------------------------------
+// COMPARE
+// ------------------------------------------------------------------
+$('btnCompare').onclick = () => {
+  const c = $('compare');
+  if (c.style.display === 'block') { c.style.display = 'none'; return; }
+  updateCompare();
+  c.style.display = 'block';
+};
+function updateCompare() {
+  if (!patchedCanvas) return;
+  const c = $('compare');
+  c.src = patchedCanvas.toDataURL('image/png');
+}
+
+$('bgColor').oninput = () => { $('bgSw').style.background = $('bgColor').value; };
+$('textColor').oninput = () => { $('txSw').style.background = $('textColor').value; };
+</script>
+</body>
+</html>
